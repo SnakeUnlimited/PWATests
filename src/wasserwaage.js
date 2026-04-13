@@ -7,12 +7,14 @@ const MAX_RECORDS = 200;
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
+
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
       }
     };
+
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -34,6 +36,7 @@ async function addReading(data, onUpdate) {
   const db = await openDB();
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
+
   store.add(data);
 
   tx.oncomplete = async () => {
@@ -55,18 +58,74 @@ async function addReading(data, onUpdate) {
     }
   };
 }
-const styles = { container: { fontFamily: "sans-serif", padding: 20, textAlign: "center", }, levelBox: { width: 200, height: 200, border: "2px solid #333", borderRadius: 12, margin: "20px auto", position: "relative", overflow: "hidden", }, bubble: { width: 40, height: 40, borderRadius: "50%", background: "#4caf50", position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", }, info: { fontSize: 14, marginTop: 10, }, dbBox: { marginTop: 20, textAlign: "left", maxWidth: 320, marginInline: "auto", }, list: { fontSize: 12, maxHeight: 200, overflowY: "auto", border: "1px solid #ddd", padding: 8, }, row: { display: "flex", justifyContent: "space-between", gap: 6, padding: "2px 0", fontFamily: "monospace", }, };
+
+const styles = {
+  container: {
+    fontFamily: "sans-serif",
+    padding: 20,
+    textAlign: "center",
+  },
+  levelBox: {
+    width: 200,
+    height: 200,
+    border: "2px solid #333",
+    borderRadius: 12,
+    margin: "20px auto",
+    position: "relative",
+    overflow: "hidden",
+  },
+  bubble: {
+    width: 40,
+    height: 40,
+    borderRadius: "50%",
+    background: "#4caf50",
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+  },
+  info: {
+    fontSize: 14,
+    marginTop: 10,
+  },
+  dbBox: {
+    marginTop: 20,
+    textAlign: "left",
+    maxWidth: 320,
+    marginInline: "auto",
+  },
+  list: {
+    fontSize: 12,
+    maxHeight: 200,
+    overflowY: "auto",
+    border: "1px solid #ddd",
+    padding: 8,
+  },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 6,
+    padding: "2px 0",
+    fontFamily: "monospace",
+  },
+};
 
 export default function WaterLevelApp() {
   const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
   const [readings, setReadings] = useState([]);
   const [isRecording, setIsRecording] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState(null);
 
   const intervalRef = useRef(null);
   const THRESHOLD = 10;
 
   useEffect(() => {
     getAllReadings().then(setReadings);
+
+    const handleInstallPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
 
     const handleOrientation = (event) => {
       const beta = event.beta || 0;
@@ -94,6 +153,7 @@ export default function WaterLevelApp() {
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
 
     intervalRef.current = setInterval(() => {
       if (!isRecording) return;
@@ -112,9 +172,21 @@ export default function WaterLevelApp() {
 
     return () => {
       window.removeEventListener("deviceorientation", handleOrientation);
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
       clearInterval(intervalRef.current);
     };
   }, [tilt.beta, tilt.gamma, isRecording]);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+
+    installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+
+    if (choice?.outcome === "accepted") {
+      setInstallPrompt(null);
+    }
+  };
 
   const levelX = Math.max(-100, Math.min(100, tilt.gamma * 5));
   const levelY = Math.max(-100, Math.min(100, tilt.beta * 5));
@@ -123,17 +195,21 @@ export default function WaterLevelApp() {
     <div style={styles.container}>
       <h2>Wasserwaage</h2>
 
-      {/* Toggle Button */}
       <button
-        onClick={() => setIsRecording((prev) => !prev)}
-        style={{
-          padding: "8px 12px",
-          marginBottom: 10,
-          cursor: "pointer",
-        }}
+        onClick={() => setIsRecording((p) => !p)}
+        style={{ padding: "8px 12px", marginBottom: 10 }}
       >
         Recording: {isRecording ? "ON" : "OFF"}
       </button>
+
+      {installPrompt && (
+        <button
+          onClick={handleInstallClick}
+          style={{ padding: "8px 12px", marginBottom: 10, marginLeft: 10 }}
+        >
+          Jetzt als PWA installieren
+        </button>
+      )}
 
       <div style={styles.levelBox}>
         <div
@@ -169,7 +245,4 @@ export default function WaterLevelApp() {
       </div>
     </div>
   );
-
-
-
-  }
+}
