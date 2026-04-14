@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 const DB_NAME = "waterlevel-db";
 const STORE = "readings";
-const MAX_RECORDS = 200;
+const MAX_RECORDS = 800;
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -114,10 +114,13 @@ export default function WaterLevelApp() {
   const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
   const [readings, setReadings] = useState([]);
   const [isRecording, setIsRecording] = useState(true);
+  const isRecordingRef = useRef(true);
   const [installPrompt, setInstallPrompt] = useState(null);
 
   const intervalRef = useRef(null);
   const THRESHOLD = 10;
+
+  useEffect(() => {isRecordingRef.current = isRecording}, [isRecording]);
 
   useEffect(() => {
     getAllReadings().then(setReadings);
@@ -134,8 +137,11 @@ export default function WaterLevelApp() {
       setTilt({ beta, gamma });
 
       const deviation = Math.max(Math.abs(beta), Math.abs(gamma));
+      if (deviation > THRESHOLD && navigator.vibrate) {
+        navigator.vibrate(200);
+      }
 
-      if (isRecording) {
+      if (isRecordingRef.current) {
         addReading(
           {
             beta,
@@ -147,9 +153,7 @@ export default function WaterLevelApp() {
         );
       }
 
-      if (deviation > THRESHOLD && navigator.vibrate) {
-        navigator.vibrate(200);
-      }
+      
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
@@ -215,7 +219,7 @@ export default function WaterLevelApp() {
         <div
           style={{
             ...styles.bubble,
-            transform: `translate(${levelX}px, ${levelY}px)`,
+            transform: `translate(${levelX-20}px, ${levelY-20}px)`,
           }}
         />
       </div>
