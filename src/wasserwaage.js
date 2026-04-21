@@ -20,44 +20,6 @@ function openDB() {
   });
 }
 
-async function getAllReadings() {
-  const db = await openDB();
-  const tx = db.transaction(STORE, "readonly");
-  const store = tx.objectStore(STORE);
-
-  return new Promise((resolve, reject) => {
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function addReading(data, onUpdate) {
-  const db = await openDB();
-  const tx = db.transaction(STORE, "readwrite");
-  const store = tx.objectStore(STORE);
-
-  store.add(data);
-
-  tx.oncomplete = async () => {
-    const all = await getAllReadings();
-
-    if (all.length > MAX_RECORDS) {
-      const excess = all.length - MAX_RECORDS;
-      const deleteTx = db.transaction(STORE, "readwrite");
-      const delStore = deleteTx.objectStore(STORE);
-
-      for (let i = 0; i < excess; i++) {
-        delStore.delete(all[i].id);
-      }
-    }
-
-    if (onUpdate) {
-      const updated = await getAllReadings();
-      onUpdate(updated);
-    }
-  };
-}
 
 const styles = {
   container: {
@@ -110,6 +72,45 @@ const styles = {
   },
 };
 
+async function getAllReadings() {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readonly");
+  const store = tx.objectStore(STORE);
+
+  return new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function addReading(data, onUpdate) {
+  const db = await openDB();
+  const tx = db.transaction(STORE, "readwrite");
+  const store = tx.objectStore(STORE);
+
+  store.add(data);
+
+  tx.oncomplete = async () => {
+    const all = await getAllReadings();
+
+    if (all.length > MAX_RECORDS) {
+      const excess = all.length - MAX_RECORDS;
+      const deleteTx = db.transaction(STORE, "readwrite");
+      const delStore = deleteTx.objectStore(STORE);
+
+      for (let i = 0; i < excess; i++) {
+        delStore.delete(all[i].id);
+      }
+    }
+
+    if (onUpdate) {
+      const updated = await getAllReadings();
+      onUpdate(updated);
+    }
+  };
+}
+
 export default function WaterLevelApp() {
   const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
   const [readings, setReadings] = useState([]);
@@ -117,10 +118,13 @@ export default function WaterLevelApp() {
   const isRecordingRef = useRef(true);
   const [installPrompt, setInstallPrompt] = useState(null);
 
-  const intervalRef = useRef(null);
+  const tiltRef = useRef({ beta: 0, gamma: 0 });
+
   const THRESHOLD = 10;
 
-  useEffect(() => {isRecordingRef.current = isRecording}, [isRecording]);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   useEffect(() => {
     getAllReadings().then(setReadings);
@@ -135,38 +139,36 @@ export default function WaterLevelApp() {
       const gamma = event.gamma || 0;
 
       setTilt({ beta, gamma });
+      tiltRef.current = { beta, gamma };
 
+      // Vibration unabhängig
       const deviation = Math.max(Math.abs(beta), Math.abs(gamma));
       if (deviation > THRESHOLD && navigator.vibrate) {
         navigator.vibrate(200);
       }
-
-      if (isRecordingRef.current) {
-        addReading(
-          {
-            beta,
-            gamma,
-            deviation,
-            ts: Date.now(),
-          },
-          setReadings
-        );
-      }
-
-      
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
     window.addEventListener("beforeinstallprompt", handleInstallPrompt);
 
-    intervalRef.current = setInterval(() => {
-      if (!isRecording) return;
+    return () => {
+      window.removeEventListener("deviceorientation", handleOrientation);
+      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+    };
+  }, []);
+
+  // Speicherung ausschließlich alle 5 Sekunden
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isRecordingRef.current) return;
+
+      const { beta, gamma } = tiltRef.current;
 
       addReading(
         {
-          beta: tilt.beta,
-          gamma: tilt.gamma,
-          deviation: Math.max(Math.abs(tilt.beta), Math.abs(tilt.gamma)),
+          beta,
+          gamma,
+          deviation: Math.max(Math.abs(beta), Math.abs(gamma)),
           ts: Date.now(),
           periodic: true,
         },
@@ -174,12 +176,8 @@ export default function WaterLevelApp() {
       );
     }, 5000);
 
-    return () => {
-      window.removeEventListener("deviceorientation", handleOrientation);
-      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
-      clearInterval(intervalRef.current);
-    };
-  }, [tilt.beta, tilt.gamma, isRecording]);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleInstallClick = async () => {
     if (!installPrompt) return;
@@ -249,4 +247,6 @@ export default function WaterLevelApp() {
       </div>
     </div>
   );
+
+
 }
