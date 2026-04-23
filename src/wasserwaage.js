@@ -20,7 +20,6 @@ function openDB() {
   });
 }
 
-
 const styles = {
   container: {
     fontFamily: "sans-serif",
@@ -113,18 +112,32 @@ async function addReading(data, onUpdate) {
 
 export default function WaterLevelApp() {
   const [tilt, setTilt] = useState({ beta: 0, gamma: 0 });
+  const [targetTilt, setTargetTilt] = useState({ beta: 0, gamma: 0 });
+
+  const [targetAngleBeta, setTargetAngleBeta] = useState(0);
+  const [targetAngleGamma, setTargetAngleGamma] = useState(0);
+
   const [readings, setReadings] = useState([]);
   const [isRecording, setIsRecording] = useState(true);
   const isRecordingRef = useRef(true);
+
   const [installPrompt, setInstallPrompt] = useState(null);
 
   const tiltRef = useRef({ beta: 0, gamma: 0 });
+  const targetRef = useRef({ beta: 0, gamma: 0 });
 
   const THRESHOLD = 10;
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
+
+  useEffect(() => {
+    targetRef.current = {
+      beta: targetAngleBeta,
+      gamma: targetAngleGamma,
+    };
+  }, [targetAngleBeta, targetAngleGamma]);
 
   useEffect(() => {
     getAllReadings().then(setReadings);
@@ -138,11 +151,21 @@ export default function WaterLevelApp() {
       const beta = event.beta || 0;
       const gamma = event.gamma || 0;
 
+      const { beta: tB, gamma: tG } = targetRef.current;
+
+      const relBeta = beta - tB;
+      const relGamma = gamma - tG;
+
       setTilt({ beta, gamma });
+      setTargetTilt({ beta: relBeta, gamma: relGamma });
+
       tiltRef.current = { beta, gamma };
 
-      // Vibration unabhängig
-      const deviation = Math.max(Math.abs(beta), Math.abs(gamma));
+      const deviation = Math.max(
+        Math.abs(relBeta),
+        Math.abs(relGamma)
+      );
+
       if (deviation > THRESHOLD && navigator.vibrate) {
         navigator.vibrate(200);
       }
@@ -157,7 +180,6 @@ export default function WaterLevelApp() {
     };
   }, []);
 
-  // Speicherung ausschließlich alle 5 Sekunden
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isRecordingRef.current) return;
@@ -179,6 +201,24 @@ export default function WaterLevelApp() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleTargetAngleChange = (value, isBeta) => {
+    let newBeta = targetAngleBeta;
+    let newGamma = targetAngleGamma;
+
+    if (isBeta) {
+      newBeta = value;
+      setTargetAngleBeta(value);
+    } else {
+      newGamma = value;
+      setTargetAngleGamma(value);
+    }
+
+    setTargetTilt({
+      beta: tilt.beta - newBeta,
+      gamma: tilt.gamma - newGamma,
+    });
+  };
+
   const handleInstallClick = async () => {
     if (!installPrompt) return;
 
@@ -190,8 +230,8 @@ export default function WaterLevelApp() {
     }
   };
 
-  const levelX = Math.max(-100, Math.min(100, tilt.gamma * 5));
-  const levelY = Math.max(-100, Math.min(100, tilt.beta * 5));
+  const levelX = Math.max(-100, Math.min(100, targetTilt.gamma * 5));
+  const levelY = Math.max(-100, Math.min(100, targetTilt.beta * 5));
 
   return (
     <div style={styles.container}>
@@ -213,18 +253,44 @@ export default function WaterLevelApp() {
         </button>
       )}
 
+      <div>
+        <h5>Normal-Winkel Beta {targetAngleBeta}</h5>
+        <input
+          type="range"
+          min="-90"
+          max="90"
+          value={targetAngleBeta}
+          onChange={(e) =>
+            handleTargetAngleChange(Number(e.target.value), true)
+          }
+        />
+
+        <h5>Normal-Winkel Gamma {targetAngleGamma}</h5>
+        <input
+          type="range"
+          min="-90"
+          max="90"
+          value={targetAngleGamma}
+          onChange={(e) =>
+            handleTargetAngleChange(Number(e.target.value), false)
+          }
+        />
+      </div>
+
       <div style={styles.levelBox}>
         <div
           style={{
             ...styles.bubble,
-            transform: `translate(${levelX-20}px, ${levelY-20}px)`,
+            transform: `translate(${levelX}px, ${levelY}px)`,
           }}
         />
       </div>
 
       <div style={styles.info}>
-        <div>Beta: {tilt.beta.toFixed(2)}</div>
-        <div>Gamma: {tilt.gamma.toFixed(2)}</div>
+        <div>Beta Absolut: {tilt.beta.toFixed(2)}</div>
+        <div>Gamma Absolut: {tilt.gamma.toFixed(2)}</div>
+        <div>Beta Relativ: {targetTilt.beta.toFixed(2)}</div>
+        <div>Gamma Relativ: {targetTilt.gamma.toFixed(2)}</div>
       </div>
 
       <p style={{ fontSize: 12 }}>
@@ -247,6 +313,4 @@ export default function WaterLevelApp() {
       </div>
     </div>
   );
-
-
 }
