@@ -35,6 +35,30 @@ const styles = {
     position: "relative",
     overflow: "hidden",
   },
+  cross: {
+    position: "absolute",
+    inset: 0,
+  },
+  
+  crossLineVertical: {
+    position: "absolute",
+    width: 2,
+    height: "100%",
+    background: "#333",
+    left: "50%",
+    transform: "translateX(-50%)",
+  },
+  
+  crossLineHorizontal: {
+    position: "absolute",
+    height: 2,
+    width: "100%",
+    background: "#333",
+    top: "50%",
+    transform: "translateY(-50%)",
+  },
+
+
   bubble: {
     width: 40,
     height: 40,
@@ -127,6 +151,7 @@ export default function WaterLevelApp() {
   const targetRef = useRef({ beta: 0, gamma: 0 });
 
   const THRESHOLD = 10;
+  const THRESHOLD_COLOR = 5;
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -230,15 +255,39 @@ export default function WaterLevelApp() {
     }
   };
 
-  const levelX = Math.max(-100, Math.min(100, targetTilt.gamma * 5));
-  const levelY = Math.max(-100, Math.min(100, targetTilt.beta * 5));
+  const levelX = Math.max(-100, Math.min(100, targetTilt.gamma * 5)) ;
+  const levelY = Math.max(-100, Math.min(100, targetTilt.beta * 5)) ;
+
+  let isBubbleCentered = ((Math.abs(Math.max(Math.abs(levelX), Math.abs(levelY))) < THRESHOLD_COLOR) ? true : false )
+
+
+  if (isBubbleCentered) {
+    styles.bubble.background = "#4caf50"
+    const audio = new Audio("/notification.mp3")
+    if (audio) {    
+      audio.currentTime = 0
+      audio.play().catch(err => {
+      console.log("Audio Error: ", err)
+    })}
+  } else {
+    styles.bubble.background = "#858f17"
+  }
 
   return (
     <div style={styles.container}>
+      
       <h2>Wasserwaage</h2>
 
       <button
-        onClick={() => setIsRecording((p) => !p)}
+        onClick={() => {
+          setIsRecording((p) => !p); 
+          const audio = new Audio("/notification.mp3")
+          if (audio) {
+            audio.play()
+          } else {
+            console.log("AUdio error")
+          }
+        }}
         style={{ padding: "8px 12px", marginBottom: 10 }}
       >
         Recording: {isRecording ? "ON" : "OFF"}
@@ -276,20 +325,25 @@ export default function WaterLevelApp() {
           }
         />
       </div>
-
+      <h5>Anzeige { levelX.toFixed(1) } / { levelY.toFixed(1) } / { isBubbleCentered ? "J" : "N"}</h5>
       <div style={styles.levelBox}>
+        <div style={styles.cross}>
+          <div style={styles.crossLineVertical} />
+          <div style={styles.crossLineHorizontal} />
+        </div>
         <div
           style={{
             ...styles.bubble,
-            transform: `translate(${levelX}px, ${levelY}px)`,
+            transform: `translate(${levelX- 0.5*styles.bubble.width}px, ${levelY- 0.5*styles.bubble.height}px)`,
           }}
         />
       </div>
 
       <div style={styles.info}>
         <div>Beta Absolut: {tilt.beta.toFixed(2)}</div>
-        <div>Gamma Absolut: {tilt.gamma.toFixed(2)}</div>
         <div>Beta Relativ: {targetTilt.beta.toFixed(2)}</div>
+        <div>---</div>
+        <div>Gamma Absolut: {tilt.gamma.toFixed(2)}</div>
         <div>Gamma Relativ: {targetTilt.gamma.toFixed(2)}</div>
       </div>
 
