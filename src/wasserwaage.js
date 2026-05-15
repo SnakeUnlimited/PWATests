@@ -39,7 +39,6 @@ const styles = {
     position: "absolute",
     inset: 0,
   },
-  
   crossLineVertical: {
     position: "absolute",
     width: 2,
@@ -48,7 +47,6 @@ const styles = {
     left: "50%",
     transform: "translateX(-50%)",
   },
-  
   crossLineHorizontal: {
     position: "absolute",
     height: 2,
@@ -57,8 +55,6 @@ const styles = {
     top: "50%",
     transform: "translateY(-50%)",
   },
-
-
   bubble: {
     width: 40,
     height: 40,
@@ -150,6 +146,8 @@ export default function WaterLevelApp() {
   const tiltRef = useRef({ beta: 0, gamma: 0 });
   const targetRef = useRef({ beta: 0, gamma: 0 });
 
+  const audioRef = useRef()
+
   const THRESHOLD = 10;
   const THRESHOLD_COLOR = 5;
 
@@ -157,6 +155,14 @@ export default function WaterLevelApp() {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
+  
+  useEffect(() => {
+    audioRef.current = {
+      ok: new Audio("/PWATests/notification.mp3"),
+      bad: new Audio("/PWATests/nein.mp3"),
+    }
+  }, [])
+  
   useEffect(() => {
     targetRef.current = {
       beta: targetAngleBeta,
@@ -204,7 +210,9 @@ export default function WaterLevelApp() {
       window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
     };
   }, []);
+  const lastPlayRef = useRef(0)
 
+  
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isRecordingRef.current) return;
@@ -261,17 +269,65 @@ export default function WaterLevelApp() {
   let isBubbleCentered = ((Math.abs(Math.max(Math.abs(levelX), Math.abs(levelY))) < THRESHOLD_COLOR) ? true : false )
 
 
+
+
   if (isBubbleCentered) {
     styles.bubble.background = "#4caf50"
-    const audio = new Audio("/notification.mp3")
-    if (audio) {    
-      audio.currentTime = 0
-      audio.play().catch(err => {
-      console.log("Audio Error: ", err)
-    })}
+    
   } else {
     styles.bubble.background = "#858f17"
   }
+
+  
+  
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const now = Date.now()
+  
+      // allow sound only every 2000ms
+      if (now - lastPlayRef.current < 2000) {
+        return
+      }
+  
+      const audio = isBubbleCentered
+        ? audioRef.current.ok
+        : audioRef.current.bad
+  
+      if (!audio) return
+  
+      // prevent overlapping playback
+      if (!audio.paused) {
+        return
+      }
+  
+      try {
+        lastPlayRef.current = now
+        audio.currentTime = 0
+        await audio.play()
+      } catch (err) {
+        console.log("Audio Error:", err)
+      }
+    }, 250)
+  
+    return () => clearInterval(interval)
+  }, [isBubbleCentered])
+  const handleSetNormalAngle = () => {
+    // use current absolute tilt as new normal angle
+    setTargetAngleBeta(tilt.beta);
+    setTargetAngleGamma(tilt.gamma);
+  
+    // relative tilt becomes 0
+    setTargetTilt({
+      beta: 0,
+      gamma: 0,
+    });
+  
+    // update refs immediately
+    targetRef.current = {
+      beta: tilt.beta,
+      gamma: tilt.gamma,
+    };
+  };
 
   return (
     <div style={styles.container}>
@@ -285,7 +341,7 @@ export default function WaterLevelApp() {
           if (audio) {
             audio.play()
           } else {
-            console.log("AUdio error")
+            console.log("Audio error")
           }
         }}
         style={{ padding: "8px 12px", marginBottom: 10 }}
@@ -324,7 +380,18 @@ export default function WaterLevelApp() {
             handleTargetAngleChange(Number(e.target.value), false)
           }
         />
+        
       </div>
+      <button
+          onClick={handleSetNormalAngle}
+          style={{
+            padding: "10px 14px",
+            marginBottom: 12,
+            fontWeight: "bold",
+          }}
+        >
+          Aktuellen Winkel als Normal-Winkel setzen
+        </button>
       <h5>Anzeige { levelX.toFixed(1) } / { levelY.toFixed(1) } / { isBubbleCentered ? "J" : "N"}</h5>
       <div style={styles.levelBox}>
         <div style={styles.cross}>
@@ -367,4 +434,5 @@ export default function WaterLevelApp() {
       </div>
     </div>
   );
+  
 }
